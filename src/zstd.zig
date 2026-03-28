@@ -3,6 +3,8 @@ const raw = @import("zstd_raw.zig").c;
 
 /// Compression level used by `compress` when no explicit level is provided.
 pub const default_level: i32 = 3;
+/// Full raw `libzstd` C API exposed via `@cImport`.
+pub const c = raw;
 const content_size_unknown: u64 = std.math.maxInt(u64);
 const content_size_error: u64 = std.math.maxInt(u64) - 1;
 

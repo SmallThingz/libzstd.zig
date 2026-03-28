@@ -40,3 +40,6 @@ defer allocator.free(compressed);
 const decompressed = try zcompress.zstd.decompress(allocator, compressed, input.len * 2);
 defer allocator.free(decompressed);
 ```
+
+Raw `libzstd` symbols are also exposed through `zcompress.zstd.c`, e.g.
+`zcompress.zstd.c.ZSTD_versionNumber()`.

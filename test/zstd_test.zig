@@ -20,3 +20,7 @@ test "zstd invalid frame is rejected" {
         zcompress.zstd.decompress(std.testing.allocator, invalid, 1024),
     );
 }
+
+test "zstd raw API is exposed" {
+    try std.testing.expect(zcompress.zstd.c.ZSTD_versionNumber() > 0);
+}
