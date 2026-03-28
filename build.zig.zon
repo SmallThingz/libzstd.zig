@@ -1,7 +1,7 @@
 .{
     .name = .libzstd,
     .version = "0.0.0",
-    .fingerprint = 0x4eca0c12403db63c,
+    .fingerprint = 0x4eca0c129ab9c44a,
     .minimum_zig_version = "0.16.0-dev.2905+5d71e3051",
     .dependencies = .{
         .zstd_upstream = .{
@@ -9,7 +9,7 @@
             .hash = "N-V-__8AAGxifwAAGwXwvsnl_aOXFGLZTeYCu0WBhuEXr96u",
         },
         .ziglibc = .{
-            .url = "https://github.com/SmallThingz/ziglibc/archive/f7498cf373a9fe67787664f6917bf15df2f68aeb.tar.gz",
+            .url = "git+https://github.com/SmallThingz/ziglibc#f7498cf373a9fe67787664f6917bf15df2f68aeb",
             .hash = "N-V-__8AAOg8CgBsWJ9s3O7sKDdMR56qqkTUlWl4nZjhXq5Z",
             .lazy = true,
         },
