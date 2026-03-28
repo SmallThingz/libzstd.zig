@@ -3,7 +3,17 @@
     .version = "0.0.0",
     .fingerprint = 0xaf925195f8dfaeb9,
     .minimum_zig_version = "0.16.0-dev.2905+5d71e3051",
-    .dependencies = .{},
+    .dependencies = .{
+        .zstd_upstream = .{
+            .url = "https://github.com/facebook/zstd/archive/refs/tags/v1.5.7.tar.gz",
+            .hash = "N-V-__8AAPZ7fwBg4JoCzM_0o2A8wxH2hsUUeiU1iuZv53L5",
+        },
+        .ziglibc = .{
+            .url = "https://github.com/SmallThingz/ziglibc/archive/f7498cf373a9fe67787664f6917bf15df2f68aeb.tar.gz",
+            .hash = "N-V-__8AAOg8CgBsWJ9s3O7sKDdMR56qqkTUlWl4nZjhXq5Z",
+            .lazy = true,
+        },
+    },
     .paths = .{
         "build.zig",
         "build.zig.zon",
