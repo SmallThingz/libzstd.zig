@@ -55,15 +55,15 @@ pub fn build(b: *std.Build) void {
     });
     configureZstdLibrary(lib.root_module, zstd_upstream, &zstd_sources);
 
-    const static_libc_artifact = if (static_libc) blk: {
-        const ziglibc_dep = b.lazyDependency("ziglibc", .{
-            .target = target,
-            .optimize = optimize,
-            .trace = false,
-        }) orelse return;
+    const ziglibc_dep = if (static_libc) b.dependency("ziglibc", .{
+        .target = target,
+        .optimize = optimize,
+        .trace = false,
+    }) else null;
 
-        const ziglibc_lib = findDependencyArtifactByLinkage(ziglibc_dep, "cguana", .static);
-        configureStaticLibc(lib.root_module, ziglibc_lib, ziglibc_dep);
+    const static_libc_artifact = if (ziglibc_dep) |dep| blk: {
+        const ziglibc_lib = findDependencyArtifactByLinkage(dep, "cguana", .static);
+        configureStaticLibc(lib.root_module, ziglibc_lib, dep);
         break :blk ziglibc_lib;
     } else null;
 
@@ -78,12 +78,7 @@ pub fn build(b: *std.Build) void {
     mod.addIncludePath(zstd_upstream.path("lib"));
     mod.linkLibrary(lib);
     if (static_libc_artifact) |artifact| {
-        const ziglibc_dep = b.lazyDependency("ziglibc", .{
-            .target = target,
-            .optimize = optimize,
-            .trace = false,
-        }) orelse return;
-        configureStaticLibc(mod, artifact, ziglibc_dep);
+        configureStaticLibc(mod, artifact, ziglibc_dep.?);
     }
 
     const tests = b.addTest(.{
@@ -96,12 +91,7 @@ pub fn build(b: *std.Build) void {
     });
     tests.root_module.addImport("libzstd", mod);
     if (static_libc_artifact) |artifact| {
-        const ziglibc_dep = b.lazyDependency("ziglibc", .{
-            .target = target,
-            .optimize = optimize,
-            .trace = false,
-        }) orelse return;
-        configureStaticLibc(tests.root_module, artifact, ziglibc_dep);
+        configureStaticLibc(tests.root_module, artifact, ziglibc_dep.?);
     }
 
     const run_tests = b.addRunArtifact(tests);
@@ -119,12 +109,7 @@ pub fn build(b: *std.Build) void {
     });
     example.root_module.addImport("libzstd", mod);
     if (static_libc_artifact) |artifact| {
-        const ziglibc_dep = b.lazyDependency("ziglibc", .{
-            .target = target,
-            .optimize = optimize,
-            .trace = false,
-        }) orelse return;
-        configureStaticLibc(example.root_module, artifact, ziglibc_dep);
+        configureStaticLibc(example.root_module, artifact, ziglibc_dep.?);
     }
     b.installArtifact(example);
 
