@@ -1,6 +1,6 @@
-# zcompress
+# libzstd
 
-`zcompress` is a Zig package that vendors C compression libraries and exposes
+`libzstd` is a Zig package that vendors C compression libraries and exposes
 small typed Zig wrappers.
 
 Current status:
@@ -12,7 +12,7 @@ Current status:
 
 - Compiles upstream `libzstd` sources directly in `build.zig`
 - Exposes one-shot and streaming APIs in Zig (`std.Io.Reader` / `std.Io.Writer`)
-- Exposes full raw `libzstd` API under `zcompress.c`
+- Exposes full raw `libzstd` API under `libzstd.c`
 - Supports both libc modes:
   - static libc via [`ziglibc`](https://github.com/SmallThingz/ziglibc) (default)
   - dynamic/system libc via `-Dstatic_libc=false`
@@ -33,7 +33,7 @@ zig build example
 ## Zig API
 
 ```zig
-const zstd = @import("zcompress");
+const zstd = @import("libzstd");
 
 const compressed = try zstd.compressDefault(allocator, input);
 defer allocator.free(compressed);

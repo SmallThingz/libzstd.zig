@@ -1,11 +1,11 @@
 .{
-    .name = .zcompress,
+    .name = .libzstd,
     .version = "0.0.0",
-    .fingerprint = 0xaf925195f8dfaeb9,
+    .fingerprint = 0x4eca0c12403db63c,
     .minimum_zig_version = "0.16.0-dev.2905+5d71e3051",
     .dependencies = .{
         .zstd_upstream = .{
-            .url = "https://github.com/facebook/zstd/archive/refs/tags/v1.5.7.tar.gz",
+            .url = "https://codeload.github.com/facebook/zstd/tar.gz/f8745da6ff1ad1e7bab384bd1f9d742439278e99",
             .hash = "N-V-__8AAPZ7fwBg4JoCzM_0o2A8wxH2hsUUeiU1iuZv53L5",
         },
         .ziglibc = .{

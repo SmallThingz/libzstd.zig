@@ -1,10 +1,10 @@
 const std = @import("std");
-const zstd = @import("zcompress");
+const zstd = @import("libzstd");
 
 pub fn main() !void {
     const gpa = std.heap.smp_allocator;
     const input =
-        "Example payload: zstd compression through the zcompress Zig wrapper.";
+        "Example payload: zstd compression through the libzstd Zig wrapper.";
 
     const compressed = try zstd.compressDefault(gpa, input);
     defer gpa.free(compressed);

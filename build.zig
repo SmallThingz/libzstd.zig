@@ -69,7 +69,7 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(lib);
 
-    const mod = b.addModule("zcompress", .{
+    const mod = b.addModule("libzstd", .{
         .root_source_file = b.path("src/zstd.zig"),
         .target = target,
         .optimize = optimize,
@@ -87,14 +87,14 @@ pub fn build(b: *std.Build) void {
     }
 
     const tests = b.addTest(.{
-        .root_module = b.addModule("zcompress_tests", .{
+        .root_module = b.addModule("libzstd_tests", .{
             .root_source_file = b.path("test/main.zig"),
             .target = target,
             .optimize = optimize,
             .link_libc = !static_libc,
         }),
     });
-    tests.root_module.addImport("zcompress", mod);
+    tests.root_module.addImport("libzstd", mod);
     if (static_libc_artifact) |artifact| {
         const ziglibc_dep = b.lazyDependency("ziglibc", .{
             .target = target,
@@ -117,7 +117,7 @@ pub fn build(b: *std.Build) void {
             .link_libc = !static_libc,
         }),
     });
-    example.root_module.addImport("zcompress", mod);
+    example.root_module.addImport("libzstd", mod);
     if (static_libc_artifact) |artifact| {
         const ziglibc_dep = b.lazyDependency("ziglibc", .{
             .target = target,

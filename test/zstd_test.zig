@@ -1,9 +1,9 @@
 const std = @import("std");
-const zstd = @import("zcompress");
+const zstd = @import("libzstd");
 
 test "zstd compress/decompress roundtrip" {
     const input =
-        "zcompress wraps libzstd and this payload should survive roundtrip compression and decompression";
+        "libzstd wraps libzstd and this payload should survive roundtrip compression and decompression";
     const compressed = try zstd.compressDefault(std.testing.allocator, input);
     defer std.testing.allocator.free(compressed);
 
