@@ -70,7 +70,7 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(lib);
 
     const mod = b.addModule("zcompress", .{
-        .root_source_file = b.path("src/root.zig"),
+        .root_source_file = b.path("src/zstd.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = !static_libc,

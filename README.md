@@ -11,7 +11,8 @@ Current status:
 ## Features
 
 - Compiles upstream `libzstd` sources directly in `build.zig`
-- Exposes simple `compress` / `decompress` APIs in Zig
+- Exposes one-shot and streaming APIs in Zig (`std.Io.Reader` / `std.Io.Writer`)
+- Exposes full raw `libzstd` API under `zcompress.c`
 - Supports both libc modes:
   - static libc via [`ziglibc`](https://github.com/SmallThingz/ziglibc) (default)
   - dynamic/system libc via `-Dstatic_libc=false`
@@ -32,14 +33,14 @@ zig build example
 ## Zig API
 
 ```zig
-const zcompress = @import("zcompress");
+const zstd = @import("zcompress");
 
-const compressed = try zcompress.zstd.compressDefault(allocator, input);
+const compressed = try zstd.compressDefault(allocator, input);
 defer allocator.free(compressed);
 
-const decompressed = try zcompress.zstd.decompress(allocator, compressed, input.len * 2);
+const decompressed = try zstd.decompress(allocator, compressed, input.len * 2);
 defer allocator.free(decompressed);
 ```
 
-Raw `libzstd` symbols are also exposed through `zcompress.zstd.c`, e.g.
-`zcompress.zstd.c.ZSTD_versionNumber()`.
+Raw `libzstd` symbols are exposed through `zstd.c`, e.g.
+`zstd.c.ZSTD_versionNumber()`.
