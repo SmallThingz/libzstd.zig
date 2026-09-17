@@ -2,15 +2,11 @@
     .name = .libzstd,
     .version = "0.0.0",
     .fingerprint = 0x4eca0c129ab9c44a,
-    .minimum_zig_version = "0.16.0-dev.2905+5d71e3051",
+    .minimum_zig_version = "0.16.0",
     .dependencies = .{
         .zstd_upstream = .{
             .url = "git+https://github.com/facebook/zstd#v1.5.7",
             .hash = "N-V-__8AAGxifwAAGwXwvsnl_aOXFGLZTeYCu0WBhuEXr96u",
-        },
-        .ziglibc = .{
-            .url = "git+https://github.com/SmallThingz/ziglibc#b6e1db3968cfc71f740c95b9308378137df4f0f0",
-            .hash = "N-V-__8AAAdgCgBOOTMNno4yXYcXyIVt9jp8J6OFyJ3UP-sL",
         },
     },
     .paths = .{

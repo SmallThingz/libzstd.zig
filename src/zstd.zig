@@ -1,4 +1,5 @@
 const std = @import("std");
+const Memory = @import("memory.zig").Memory;
 
 /// Full raw `libzstd` C API exposed via `@cImport`.
 ///
@@ -20,12 +21,17 @@ pub const StreamOptions = struct {
 pub const EncoderOptions = struct {
     /// Compression level passed to `ZSTD_initCStream`.
     level: i32 = default_level,
+    /// Emit a content checksum, checked by the decoder.
+    checksum: bool = true,
     /// Stream buffer sizing options.
     stream: StreamOptions = .{},
 };
 
 /// Streaming decoder options.
 pub const DecoderOptions = struct {
+    max_output_size: usize = std.math.maxInt(usize),
+    /// Bound native decoder window memory (base-2 logarithm).
+    window_log_max: u5 = 27,
     /// Stream buffer sizing options.
     stream: StreamOptions = .{},
 };
@@ -34,12 +40,17 @@ pub const DecoderOptions = struct {
 pub const Encoder = struct {
     allocator: std.mem.Allocator,
     cstream: *c.ZSTD_CStream,
+    memory: *Memory,
+    failed: bool = false,
+    finished: bool = false,
     in_buffer: []u8,
     out_buffer: []u8,
 
     /// Allocates and initializes a streaming encoder.
     pub fn init(allocator: std.mem.Allocator, opts: EncoderOptions) !Encoder {
-        const cstream = c.ZSTD_createCStream() orelse return error.OutOfMemory;
+        const memory = try Memory.create(allocator);
+        errdefer memory.destroy();
+        const cstream = c.ZSTD_createCStream_advanced(.{ .customAlloc = Memory.alloc, .customFree = Memory.free, .@"opaque" = memory }) orelse return error.OutOfMemory;
         errdefer _ = c.ZSTD_freeCStream(cstream);
 
         const in_size = opts.stream.in_buffer_size orelse c.ZSTD_CStreamInSize();
@@ -52,10 +63,12 @@ pub const Encoder = struct {
         errdefer allocator.free(out_buffer);
 
         _ = try checkCode(c.ZSTD_initCStream(cstream, opts.level));
+        _ = try checkCode(c.ZSTD_CCtx_setParameter(cstream, c.ZSTD_c_checksumFlag, @intFromBool(opts.checksum)));
 
         return .{
             .allocator = allocator,
             .cstream = cstream,
+            .memory = memory,
             .in_buffer = in_buffer,
             .out_buffer = out_buffer,
         };
@@ -66,6 +79,8 @@ pub const Encoder = struct {
         self.allocator.free(self.in_buffer);
         self.allocator.free(self.out_buffer);
         _ = c.ZSTD_freeCStream(self.cstream);
+        self.memory.destroy();
+        self.* = undefined;
     }
 
     /// Sets a zstd compression parameter on the underlying stream context.
@@ -73,9 +88,16 @@ pub const Encoder = struct {
         _ = try checkCode(c.ZSTD_CCtx_setParameter(self.cstream, param, value));
     }
 
+    /// Copies a raw or trained dictionary into this context.
+    pub fn loadDictionary(self: *Encoder, dictionary: []const u8) !void {
+        _ = try checkCode(c.ZSTD_CCtx_loadDictionary(self.cstream, dictionary.ptr, dictionary.len));
+    }
+
     /// Resets encoder state and level for a new frame.
     pub fn reset(self: *Encoder, level: i32) !void {
         _ = try checkCode(c.ZSTD_initCStream(self.cstream, level));
+        self.failed = false;
+        self.finished = false;
     }
 
     /// Pushes input bytes into the encoder with `ZSTD_e_continue`.
@@ -93,10 +115,12 @@ pub const Encoder = struct {
 
     /// Finishes the current frame with `ZSTD_e_end`.
     pub fn finish(self: *Encoder, writer: *std.Io.Writer) !void {
+        if (self.finished) return;
         while (true) {
             const remaining = try self.run(&.{}, c.ZSTD_e_end, writer);
             if (remaining == 0) break;
         }
+        self.finished = true;
     }
 
     /// Reads all data from `reader`, encodes it, and writes to `writer`.
@@ -115,6 +139,9 @@ pub const Encoder = struct {
         directive: c.ZSTD_EndDirective,
         writer: *std.Io.Writer,
     ) !usize {
+        if (self.failed) return error.InvalidState;
+        if (self.finished) return error.StreamFinished;
+        errdefer self.failed = true;
         var inb = c.ZSTD_inBuffer{
             .src = if (input.len == 0) null else @ptrCast(input.ptr),
             .size = input.len,
@@ -148,12 +175,19 @@ pub const Encoder = struct {
 pub const Decoder = struct {
     allocator: std.mem.Allocator,
     dstream: *c.ZSTD_DStream,
+    memory: *Memory,
+    failed: bool = false,
+    total_output: usize = 0,
+    max_output_size: usize,
+    last_hint: usize = 1,
     in_buffer: []u8,
     out_buffer: []u8,
 
     /// Allocates and initializes a streaming decoder.
     pub fn init(allocator: std.mem.Allocator, opts: DecoderOptions) !Decoder {
-        const dstream = c.ZSTD_createDStream() orelse return error.OutOfMemory;
+        const memory = try Memory.create(allocator);
+        errdefer memory.destroy();
+        const dstream = c.ZSTD_createDStream_advanced(.{ .customAlloc = Memory.alloc, .customFree = Memory.free, .@"opaque" = memory }) orelse return error.OutOfMemory;
         errdefer _ = c.ZSTD_freeDStream(dstream);
 
         const in_size = opts.stream.in_buffer_size orelse c.ZSTD_DStreamInSize();
@@ -166,10 +200,13 @@ pub const Decoder = struct {
         errdefer allocator.free(out_buffer);
 
         _ = try checkCode(c.ZSTD_initDStream(dstream));
+        _ = try checkCode(c.ZSTD_DCtx_setParameter(dstream, c.ZSTD_d_windowLogMax, opts.window_log_max));
 
         return .{
             .allocator = allocator,
             .dstream = dstream,
+            .max_output_size = opts.max_output_size,
+            .memory = memory,
             .in_buffer = in_buffer,
             .out_buffer = out_buffer,
         };
@@ -180,6 +217,8 @@ pub const Decoder = struct {
         self.allocator.free(self.in_buffer);
         self.allocator.free(self.out_buffer);
         _ = c.ZSTD_freeDStream(self.dstream);
+        self.memory.destroy();
+        self.* = undefined;
     }
 
     /// Sets a zstd decompression parameter on the underlying stream context.
@@ -187,36 +226,39 @@ pub const Decoder = struct {
         _ = try checkCode(c.ZSTD_DCtx_setParameter(self.dstream, param, value));
     }
 
+    /// Copies a raw or trained dictionary into this context.
+    pub fn loadDictionary(self: *Decoder, dictionary: []const u8) !void {
+        _ = try checkCode(c.ZSTD_DCtx_loadDictionary(self.dstream, dictionary.ptr, dictionary.len));
+    }
+
     /// Resets decoder state for a new stream.
     pub fn reset(self: *Decoder) !void {
         _ = try checkCode(c.ZSTD_initDStream(self.dstream));
+        self.failed = false;
+        self.last_hint = 1;
+        self.total_output = 0;
     }
 
     /// Pushes compressed bytes into the decoder and writes produced output.
     ///
     /// Returns zstd's remaining-input hint from the final `decompressStream` call.
     pub fn update(self: *Decoder, input: []const u8, writer: *std.Io.Writer) !usize {
-        var hint: usize = 0;
-        var inb = c.ZSTD_inBuffer{
-            .src = if (input.len == 0) null else @ptrCast(input.ptr),
-            .size = input.len,
-            .pos = 0,
-        };
-
-        while (inb.pos < inb.size) {
-            var outb = c.ZSTD_outBuffer{
-                .dst = @ptrCast(self.out_buffer.ptr),
-                .size = self.out_buffer.len,
-                .pos = 0,
-            };
-
-            hint = try checkCode(c.ZSTD_decompressStream(self.dstream, &outb, &inb));
-            if (outb.pos != 0) try writer.writeAll(self.out_buffer[0..outb.pos]);
-
-            if (outb.pos == 0 and inb.pos == 0 and hint != 0) return error.DecompressionStalled;
+        if (self.failed) return error.InvalidState;
+        errdefer self.failed = true;
+        if (input.len == 0 and self.last_hint == 0) return 0;
+        var inb = c.ZSTD_inBuffer{ .src = input.ptr, .size = input.len, .pos = 0 };
+        while (true) {
+            const previous = inb.pos;
+            var outb = c.ZSTD_outBuffer{ .dst = self.out_buffer.ptr, .size = self.out_buffer.len, .pos = 0 };
+            self.last_hint = try checkCode(c.ZSTD_decompressStream(self.dstream, &outb, &inb));
+            if (outb.pos > self.max_output_size - self.total_output) return error.OutputTooLarge;
+            try writer.writeAll(self.out_buffer[0..outb.pos]);
+            self.total_output += outb.pos;
+            // Drain native pending output even when all input was consumed.
+            if (inb.pos == inb.size and (outb.pos < outb.size or self.last_hint == 0)) break;
+            if (outb.pos == 0 and inb.pos == previous) return error.DecompressionStalled;
         }
-
-        return hint;
+        return self.last_hint;
     }
 
     /// Reads all compressed data from `reader`, decodes it, and writes to `writer`.
@@ -226,24 +268,34 @@ pub const Decoder = struct {
             if (n == 0) break;
             _ = try self.update(self.in_buffer[0..n], writer);
         }
+        try self.finish();
+    }
+
+    /// Call at EOF after incremental updates; rejects incomplete frames.
+    pub fn finish(self: *Decoder) !void {
+        if (self.failed) return error.InvalidState;
+        if (self.last_hint != 0) return error.TruncatedInput;
     }
 };
 
 /// Compresses `src` into a new allocation using zstd one-shot API.
 pub fn compress(allocator: std.mem.Allocator, src: []const u8, level: i32) ![]u8 {
-    const bound = c.ZSTD_compressBound(src.len);
-    _ = try checkCode(bound);
-
-    const out = try allocator.alloc(u8, bound);
-    errdefer allocator.free(out);
-
-    const written = c.ZSTD_compress(out.ptr, out.len, src.ptr, src.len, level);
-    _ = try checkCode(written);
-
-    return shrinkOwnedSlice(allocator, out, written);
+    return compressWithOptions(allocator, src, .{ .level = level });
 }
 
 /// Compresses `src` using `default_level`.
+pub fn compressWithOptions(allocator: std.mem.Allocator, src: []const u8, options: EncoderOptions) ![]u8 {
+    var encoder = try Encoder.init(allocator, options);
+    defer encoder.deinit();
+    _ = try checkCode(c.ZSTD_CCtx_setPledgedSrcSize(encoder.cstream, src.len));
+    var out: std.Io.Writer.Allocating = .init(allocator);
+    defer out.deinit();
+    encoder.update(src, &out.writer) catch |err| return if (err == error.WriteFailed) error.OutOfMemory else err;
+    encoder.finish(&out.writer) catch |err| return if (err == error.WriteFailed) error.OutOfMemory else err;
+    return out.toOwnedSlice();
+}
+
+/// Compress with the default level and a checksum.
 pub fn compressDefault(allocator: std.mem.Allocator, src: []const u8) ![]u8 {
     return compress(allocator, src, default_level);
 }
@@ -261,6 +313,8 @@ pub fn decompress(
 
     const frame_size: u64 = @intCast(c.ZSTD_getFrameContentSize(src.ptr, src.len));
     if (frame_size == content_size_error) return error.InvalidFrame;
+    const compressed_size = try checkCode(c.ZSTD_findFrameCompressedSize(src.ptr, src.len));
+    if (compressed_size != src.len) return error.TrailingData;
 
     const target_len: usize = if (frame_size == content_size_unknown) blk: {
         break :blk max_output_size orelse return error.UnknownDecompressedSize;
@@ -270,18 +324,13 @@ pub fn decompress(
         if (target_len > max) return error.OutputTooLarge;
     }
 
-    const out = try allocator.alloc(u8, target_len);
-    errdefer allocator.free(out);
-
-    const written = c.ZSTD_decompress(out.ptr, out.len, src.ptr, src.len);
-    if (c.ZSTD_isError(written) != 0) {
-        if (c.ZSTD_getErrorCode(written) == c.ZSTD_error_dstSize_tooSmall) {
-            return error.OutputTooLarge;
-        }
-        return error.DecompressionFailed;
-    }
-
-    return shrinkOwnedSlice(allocator, out, written);
+    var decoder = try Decoder.init(allocator, .{ .max_output_size = target_len });
+    defer decoder.deinit();
+    var out: std.Io.Writer.Allocating = .init(allocator);
+    defer out.deinit();
+    var reader: std.Io.Reader = .fixed(src);
+    decoder.decodeReader(&reader, &out.writer) catch |err| return if (err == error.WriteFailed) error.OutOfMemory else err;
+    return out.toOwnedSlice();
 }
 
 /// Compresses bytes from `reader` into `writer` using streaming API.
@@ -318,21 +367,21 @@ pub fn errorName(code: usize) []const u8 {
 }
 
 fn checkCode(code: usize) !usize {
-    if (c.ZSTD_isError(code) != 0) return error.ZstdError;
+    if (c.ZSTD_isError(code) != 0) return switch (c.ZSTD_getErrorCode(code)) {
+        c.ZSTD_error_memory_allocation => error.OutOfMemory,
+        c.ZSTD_error_dstSize_tooSmall, c.ZSTD_error_frameParameter_windowTooLarge => error.OutputTooLarge,
+        c.ZSTD_error_checksum_wrong => error.ChecksumMismatch,
+        c.ZSTD_error_srcSize_wrong => error.TruncatedInput,
+        c.ZSTD_error_corruption_detected, c.ZSTD_error_prefix_unknown => error.InvalidFrame,
+        c.ZSTD_error_dictionary_wrong, c.ZSTD_error_dictionary_corrupted => error.InvalidDictionary,
+        c.ZSTD_error_parameter_unsupported, c.ZSTD_error_parameter_outOfBound => error.InvalidParameter,
+        c.ZSTD_error_stage_wrong => error.InvalidState,
+        else => error.ZstdError,
+    };
     return code;
 }
 
 fn toUsize(value: u64) !usize {
     if (value > std.math.maxInt(usize)) return error.OutputTooLarge;
     return @intCast(value);
-}
-
-fn shrinkOwnedSlice(allocator: std.mem.Allocator, buf: []u8, len: usize) ![]u8 {
-    if (len == buf.len) return buf;
-    if (allocator.resize(buf, len)) return buf[0..len];
-
-    const exact = try allocator.alloc(u8, len);
-    @memcpy(exact, buf[0..len]);
-    allocator.free(buf);
-    return exact;
 }
