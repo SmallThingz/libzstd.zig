@@ -2,7 +2,7 @@
     .name = .libzstd,
     .version = "0.0.0",
     .fingerprint = 0x4eca0c129ab9c44a,
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0",
     .dependencies = .{
         .zstd_upstream = .{
             .url = "git+https://github.com/facebook/zstd#v1.5.7",

@@ -1,6 +1,6 @@
 # libzstd.zig
 
-Zstandard 1.5.7 for Zig 0.16.0. Native `std.Build` compiles the pinned upstream C
+Zstandard 1.5.7 for Zig 0.17.0. Native `std.Build` compiles the pinned upstream C
 sources, including dictionary training, directly. No upstream build script or
 custom libc is used.
 
@@ -59,7 +59,7 @@ than pretending to enable workers.
 
 ```sh
 zig build test example -j2
-zig build test -Doptimize=ReleaseSafe -j2
+zig build test -Doptimize=safe -j2
 zig build check -Dshared=true -j2
 zig build check -Dtarget=x86_64-linux-musl -j2
 ```
