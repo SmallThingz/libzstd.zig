@@ -104,7 +104,7 @@ test "every truncated prefix is rejected by streaming decoder" {
 }
 
 test "stream limit and failed writer poison decoder or encoder" {
-    const encoded = try zstd.compressDefault(allocator, "a" ** 4096);
+    const encoded = try zstd.compressDefault(allocator, &@as([4096]u8, @splat('a')));
     defer allocator.free(encoded);
     var decoder = try zstd.Decoder.init(allocator, .{ .max_output_size = 9, .stream = .{ .out_buffer_size = 5 } });
     defer decoder.deinit();
@@ -175,7 +175,9 @@ test "streaming concatenated frames and unknown content size" {
 }
 
 test "dictionary copies survive caller mutation and raw trainer links" {
-    var dict = ("a reusable dictionary with enough repeated vocabulary " ** 16).*;
+    const phrase = "a reusable dictionary with enough repeated vocabulary ";
+    var dict: [phrase.len * 16]u8 = undefined;
+    for (0..16) |i| @memcpy(dict[i * phrase.len ..][0..phrase.len], phrase);
     var encoder = try zstd.Encoder.init(allocator, .{});
     defer encoder.deinit();
     var decoder = try zstd.Decoder.init(allocator, .{});

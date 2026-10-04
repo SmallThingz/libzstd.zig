@@ -69,6 +69,15 @@ pub fn build(b: *std.Build) void {
     mod.addIncludePath(zstd_upstream.path("lib"));
     mod.linkLibrary(lib);
 
+    const headers = b.addWriteFiles();
+    const bindings = b.addTranslateC(.{
+        .root_source_file = headers.add("zstd.h", "#define ZSTD_STATIC_LINKING_ONLY 1\n#include <zstd.h>\n#include <zstd_errors.h>\n#include <zdict.h>\n"),
+        .target = target,
+        .optimize = optimize,
+    });
+    bindings.addIncludePath(zstd_upstream.path("lib"));
+    mod.addImport("zstd_c", bindings.createModule());
+
     const tests = b.addTest(.{
         .use_lld = target.result.ofmt != .macho,
         .use_llvm = true,
